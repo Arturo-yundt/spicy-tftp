@@ -40,6 +40,9 @@ export {
 
 	## Event that can be handled to access the TFTP logging record.
 	global log_tftp: event(rec: Info);
+
+    ## Additional TFTP ports supplied through ZEEK_TFTP_PORTS.
+    const tftp_ports_str = getenv("ZEEK_TFTP_PORTS") &redef;
 }
 
 # Maps a partial data connection ID to the request's Info record.
@@ -53,6 +56,37 @@ event zeek_init() &priority=5
 	{
 	Log::create_stream(TFTP::LOG, [$columns = Info, $ev = log_tftp, $path="tftp"]);
 	}
+
+event zeek_init() &priority=-5
+    {
+    if ( tftp_ports_str != "" )
+        {
+        local tftp_ports =
+            split_string(tftp_ports_str, /,/);
+
+        local tftp_ports_udp: set[port] = {};
+
+        for ( tftp_port_idx in tftp_ports )
+            {
+            local tftp_port =
+                to_port(tftp_ports[tftp_port_idx]);
+
+            local tftp_prot =
+                get_port_transport_proto(tftp_port);
+
+            if ( tftp_prot == udp )
+                add tftp_ports_udp[tftp_port];
+            }
+
+        if ( |tftp_ports_udp| > 0 )
+            {
+            Analyzer::register_for_ports(
+                Analyzer::ANALYZER_SPICY_TFTP,
+                tftp_ports_udp
+            );
+            }
+        }
+    }
 
 function log_pending(c: connection)
 	{
